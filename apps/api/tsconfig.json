@@ -1,0 +1,37 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "declaration": true,
+    "removeComments": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "allowSyntheticDefaultImports": true,
+    "target": "ES2022",
+    "sourceMap": true,
+    "outDir": "./dist",
+    "baseUrl": "./",
+    "incremental": true,
+    "strictNullChecks": true,
+    "noImplicitAny": true,
+    "strictBindCallApply": true,
+    "noFallthroughCasesInSwitch": true,
+    "rootDir": "./src",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@shared/types": ["../../packages/shared-types/src"],
+      "@shared/validation": ["../../packages/shared-validation/src"],
+      "@shared/constants": ["../../packages/shared-constants/src"],
+      "@shared/config": ["../../packages/shared-config/src"],
+      "@shared/utils": ["../../packages/shared-utils/src"]
+    }
+  },
+  "include": ["src/**/*"],
+  "references": [
+    { "path": "../../packages/shared-types" },
+    { "path": "../../packages/shared-validation" },
+    { "path": "../../packages/shared-constants" },
+    { "path": "../../packages/shared-config" },
+    { "path": "../../packages/shared-utils" }
+  ]
+}

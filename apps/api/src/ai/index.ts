@@ -1,0 +1,10 @@
+export { AiModule } from './ai.module';
+export { AiService } from './services/ai.service';
+export { VectorService } from './services/vector.service';
+export { DocumentProcessorService } from './services/document-processor.service';
+export { SentimentService } from './services/sentiment.service';
+export { CopilotService } from './services/copilot.service';
+export { OpenaiProvider } from './providers/openai.provider';
+export { ClaudeProvider } from './providers/claude.provider';
+export { GeminiProvider } from './providers/gemini.provider';
+export { AiProvider, ChatOptions, ContextResult, VectorResult } from './providers/ai-provider.interface';

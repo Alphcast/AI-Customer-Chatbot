@@ -1,0 +1,572 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  BUSINESS_OWNER
+  SUPPORT_AGENT
+  CUSTOMER
+}
+
+enum AgentType {
+  CUSTOMER_SUPPORT
+  SALES
+  BILLING
+  TECHNICAL_SUPPORT
+}
+
+enum TicketStatus {
+  OPEN
+  PENDING
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ConversationStatus {
+  ACTIVE
+  WAITING
+  RESOLVED
+  CLOSED
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  FILE
+  VOICE
+  SYSTEM
+}
+
+enum SubscriptionPlan {
+  STARTER
+  PROFESSIONAL
+  BUSINESS
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELED
+  EXPIRED
+  PAST_DUE
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum PaymentProvider {
+  STRIPE
+  PAYSTACK
+  FLUTTERWAVE
+}
+
+enum NotificationType {
+  CHAT_ASSIGNED
+  TICKET_CREATED
+  MENTION
+  SYSTEM
+  BILLING
+}
+
+enum Sentiment {
+  POSITIVE
+  NEUTRAL
+  NEGATIVE
+  ANGRY
+  FRUSTRATED
+}
+
+enum ChannelType {
+  WEBSITE
+  WHATSAPP
+  TELEGRAM
+  MESSENGER
+  INSTAGRAM
+  EMAIL
+  MOBILE
+}
+
+enum DocumentType {
+  PDF
+  DOCX
+  TXT
+  CSV
+  FAQ
+  URL
+  PRODUCT_CATALOG
+}
+
+enum DocumentStatus {
+  PROCESSING
+  EMBEDDED
+  FAILED
+}
+
+enum ModelProvider {
+  OPENAI
+  CLAUDE
+  GEMINI
+}
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  password     String
+  firstName    String
+  lastName     String
+  avatar       String?
+  phone        String?
+  role         UserRole      @default(CUSTOMER)
+  isActive     Boolean       @default(true)
+  isVerified   Boolean       @default(false)
+  lastLoginAt  DateTime?
+  refreshToken String?
+  googleId     String?       @unique
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  deletedAt    DateTime?
+
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  agent                Agent?
+  assignedConversations Conversation[] @relation("AssignedAgent")
+  messages             Message[]      @relation("Sender")
+  tickets              Ticket[]       @relation("Assignee")
+  notifications        Notification[]
+  auditLogs            AuditLog[]
+  internalNotes        InternalNote[]
+
+  @@index([email])
+  @@index([role])
+  @@index([companyId])
+  @@index([deletedAt])
+  @@map("users")
+}
+
+model Company {
+  id              String   @id @default(cuid())
+  name            String
+  slug            String   @unique
+  logo            String?
+  website         String?
+  description     String?
+  industry        String?
+  size            String?
+  timezone        String   @default("UTC")
+  defaultLanguage String   @default("en")
+  settings        Json?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  deletedAt       DateTime?
+
+  users        User[]
+  agents       Agent[]
+  customers    Customer[]
+  conversations Conversation[]
+  knowledgeBases KnowledgeBase[]
+  documents    Document[]
+  subscriptions Subscription[]
+  payments     Payment[]
+  apiKeys      ApiKey[]
+
+  @@index([slug])
+  @@index([isActive])
+  @@index([deletedAt])
+  @@map("companies")
+}
+
+model Agent {
+  id                 String    @id @default(cuid())
+  name               String
+  description        String?
+  personality        String?
+  tone               String?
+  language           String    @default("en")
+  instructions       String?
+  type               AgentType @default(CUSTOMER_SUPPORT)
+  modelProvider      ModelProvider @default(OPENAI)
+  modelName          String    @default("gpt-4")
+  temperature        Float     @default(0.7)
+  maxTokens          Int       @default(4096)
+  confidenceThreshold Float    @default(0.8)
+  isActive           Boolean   @default(true)
+  settings           Json?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  deletedAt          DateTime?
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  conversationHandoffRules ConversationHandoffRule[]
+  knowledgeSources        AgentKnowledgeSource[]
+  conversations           Conversation[]           @relation("AIAgent")
+
+  @@index([companyId])
+  @@index([type])
+  @@index([isActive])
+  @@index([deletedAt])
+  @@map("agents")
+}
+
+model Customer {
+  id         String   @id @default(cuid())
+  email      String
+  firstName  String
+  lastName   String
+  avatar     String?
+  phone      String?
+  externalId String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  conversations Conversation[]
+  messages      Message[]      @relation("CustomerMessage")
+  tickets       Ticket[]
+
+  @@unique([companyId, email])
+  @@index([companyId])
+  @@index([email])
+  @@index([externalId])
+  @@map("customers")
+}
+
+model Conversation {
+  id         String             @id @default(cuid())
+  status     ConversationStatus @default(ACTIVE)
+  channel    ChannelType        @default(WEBSITE)
+  sentiment  Sentiment          @default(NEUTRAL)
+  metadata   Json?
+  startedAt  DateTime           @default(now())
+  assignedAt DateTime?
+  resolvedAt DateTime?
+  closedAt   DateTime?
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  companyId     String
+  customerId    String
+  assignedUserId String?
+  aiAgentId     String?
+
+  company      Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer     Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  assignedUser User?      @relation("AssignedAgent", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  aiAgent      Agent?     @relation("AIAgent", fields: [aiAgentId], references: [id], onDelete: SetNull)
+
+  messages Message[]
+  tickets  Ticket[]
+
+  @@index([companyId])
+  @@index([customerId])
+  @@index([assignedUserId])
+  @@index([aiAgentId])
+  @@index([status])
+  @@index([channel])
+  @@index([sentiment])
+  @@index([createdAt])
+  @@map("conversations")
+}
+
+model Message {
+  id        String      @id @default(cuid())
+  content   String
+  type      MessageType @default(TEXT)
+  metadata  Json?
+  fileUrl   String?
+  fileSize  Int?
+  mimeType  String?
+  isRead    Boolean     @default(false)
+  sentiment Sentiment   @default(NEUTRAL)
+  createdAt DateTime    @default(now())
+
+  conversationId String
+  senderId       String?
+  customerId     String?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User?        @relation("Sender", fields: [senderId], references: [id], onDelete: SetNull)
+  customer     Customer?    @relation("CustomerMessage", fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId])
+  @@index([senderId])
+  @@index([customerId])
+  @@index([createdAt])
+  @@map("messages")
+}
+
+model Ticket {
+  id          String       @id @default(cuid())
+  title       String
+  description String?
+  status      TicketStatus @default(OPEN)
+  priority    TicketPriority @default(MEDIUM)
+  category    String?
+  slaDeadline DateTime?
+  resolvedAt  DateTime?
+  closedAt    DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  companyId      String
+  customerId     String
+  assigneeId     String?
+  conversationId String?
+
+  company      Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  assignee     User?        @relation("Assignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+
+  internalNotes InternalNote[]
+
+  @@index([companyId])
+  @@index([customerId])
+  @@index([assigneeId])
+  @@index([conversationId])
+  @@index([status])
+  @@index([priority])
+  @@index([category])
+  @@index([slaDeadline])
+  @@index([createdAt])
+  @@map("tickets")
+}
+
+model InternalNote {
+  id        String   @id @default(cuid())
+  content   String
+  createdAt DateTime @default(now())
+
+  ticketId String
+  authorId String
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([authorId])
+  @@index([createdAt])
+  @@map("internal_notes")
+}
+
+model KnowledgeBase {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  documents Document[]
+  agents    AgentKnowledgeSource[]
+
+  @@index([companyId])
+  @@index([isActive])
+  @@map("knowledge_bases")
+}
+
+model Document {
+  id          String         @id @default(cuid())
+  title       String
+  fileUrl     String?
+  fileType    DocumentType
+  fileSize    Int?
+  content     String?
+  status      DocumentStatus @default(PROCESSING)
+  chunkCount  Int            @default(0)
+  metadata    Json?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  knowledgeBaseId String
+  knowledgeBase   KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+
+  embeddings Embedding[]
+
+  @@index([knowledgeBaseId])
+  @@index([status])
+  @@index([fileType])
+  @@map("documents")
+}
+
+model Embedding {
+  id         String   @id @default(cuid())
+  vectorId   String
+  content    String
+  chunkIndex Int
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@index([vectorId])
+  @@index([documentId, chunkIndex])
+  @@map("embeddings")
+}
+
+model AgentKnowledgeSource {
+  agentId        String
+  knowledgeBaseId String
+
+  agent         Agent         @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  knowledgeBase KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+
+  @@id([agentId, knowledgeBaseId])
+  @@index([agentId])
+  @@index([knowledgeBaseId])
+  @@map("agent_knowledge_sources")
+}
+
+model ConversationHandoffRule {
+  id        String   @id @default(cuid())
+  name      String
+  condition String
+  priority  Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  agentId String
+  agent   Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId])
+  @@index([isActive])
+  @@map("conversation_handoff_rules")
+}
+
+model Subscription {
+  id                    String             @id @default(cuid())
+  plan                  SubscriptionPlan
+  status                SubscriptionStatus @default(ACTIVE)
+  provider              PaymentProvider
+  providerSubscriptionId String?
+  seats                 Int                @default(1)
+  aiTokenLimit          Int                @default(100000)
+  storageLimit          Int                @default(1024)
+  features              Json?
+  currentPeriodStart    DateTime
+  currentPeriodEnd      DateTime
+  trialEndsAt           DateTime?
+  canceledAt            DateTime?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  companyId String
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  payments  Payment[]
+
+  @@index([companyId])
+  @@index([status])
+  @@index([plan])
+  @@index([currentPeriodEnd])
+  @@map("subscriptions")
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  amount            Decimal       @db(Decimal(10, 2))
+  currency          String        @default("USD")
+  status            PaymentStatus @default(PENDING)
+  provider          PaymentProvider
+  providerPaymentId String?
+  providerData      Json?
+  description       String?
+  invoiceUrl        String?
+  createdAt         DateTime      @default(now())
+
+  companyId      String
+  subscriptionId String?
+
+  company      Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([subscriptionId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("payments")
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  type      NotificationType
+  title     String
+  body      String?
+  data      Json?
+  isRead    Boolean          @default(false)
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  userId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  action    String
+  entity    String
+  entityId  String
+  changes   Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  userId String?
+  user   User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model ApiKey {
+  id        String    @id @default(cuid())
+  key       String    @unique
+  name      String
+  lastUsedAt DateTime?
+  expiresAt DateTime?
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([key])
+  @@index([isActive])
+  @@map("api_keys")
+}

@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chatbot-config
+  namespace: chatbot-platform
+  labels:
+    app.kubernetes.io/name: ai-chatbot
+    app.kubernetes.io/part-of: customer-support-platform
+data:
+  NODE_ENV: "production"
+  API_PREFIX: "/api/v1"
+  JWT_EXPIRES_IN: "15m"
+  JWT_REFRESH_EXPIRES_IN: "7d"
+  FRONTEND_URL: "https://chatbot.example.com"
+  CORS_ORIGINS: "https://chatbot.example.com"
+  AWS_REGION: "us-east-1"
+  REDIS_PREFIX: "chatbot"
+  LOG_LEVEL: "info"
+  RATE_LIMIT_TTL: "60"
+  RATE_LIMIT_MAX: "100"
+  UPLOAD_MAX_FILE_SIZE: "10485760"
+  DB_POOL_MIN: "2"
+  DB_POOL_MAX: "10"
+  NEXT_PUBLIC_API_URL: "https://api.chatbot.example.com/api/v1"
+  NEXT_PUBLIC_SOCKET_URL: "wss://api.chatbot.example.com"
+  NEXT_PUBLIC_APP_NAME: "AI Customer Support"
+  NEXT_PUBLIC_APP_URL: "https://chatbot.example.com"

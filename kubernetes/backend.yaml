@@ -1,0 +1,258 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: chatbot-platform
+  labels:
+    app: backend
+    app.kubernetes.io/name: ai-chatbot
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: customer-support-platform
+spec:
+  selector:
+    app: backend
+  ports:
+    - port: 3001
+      targetPort: 3001
+      name: http
+      protocol: TCP
+    - port: 3001
+      targetPort: 3001
+      name: websocket
+      protocol: TCP
+  type: ClusterIP
+  sessionAffinity: None
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: chatbot-platform
+  labels:
+    app: backend
+    app.kubernetes.io/name: ai-chatbot
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: customer-support-platform
+    app.kubernetes.io/version: "1.0.0"
+spec:
+  replicas: 3
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+        app.kubernetes.io/name: ai-chatbot
+        app.kubernetes.io/component: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3001"
+        prometheus.io/path: "/api/v1/metrics"
+        vault.hashicorp.com/agent-inject: "true"
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - backend
+                topologyKey: kubernetes.io/hostname
+            - weight: 50
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - backend
+                topologyKey: topology.kubernetes.io/zone
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: backend
+      containers:
+        - name: backend
+          image: chatbot-platform/backend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3001
+              name: http
+              protocol: TCP
+          env:
+            - name: NODE_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: chatbot-config
+                  key: NODE_ENV
+            - name: DATABASE_URL
+              value: "postgresql://chatbot:$(DB_PASSWORD)@postgres:5432/chatbot"
+            - name: REDIS_URL
+              value: "redis://redis:6379"
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: chatbot-secrets
+                  key: JWT_SECRET
+            - name: JWT_REFRESH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: chatbot-secrets
+                  key: JWT_REFRESH_SECRET
+            - name: JWT_EXPIRES_IN
+              valueFrom:
+                configMapKeyRef:
+                  name: chatbot-config
+                  key: JWT_EXPIRES_IN
+            - name: JWT_REFRESH_EXPIRES_IN
+              valueFrom:
+                configMapKeyRef:
+                  name: chatbot-config
+                  key: JWT_REFRESH_EXPIRES_IN
+            - name: API_PREFIX
+              valueFrom:
+                configMapKeyRef:
+                  name: chatbot-config
+                  key: API_PREFIX
+            - name: CORS_ORIGINS
+              valueFrom:
+                configMapKeyRef:
+                  name: chatbot-config
+                  key: CORS_ORIGINS
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: chatbot-secrets
+                  key: OPENAI_API_KEY
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: chatbot-secrets
+                  key: ANTHROPIC_API_KEY
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: chatbot-secrets
+                  key: GEMINI_API_KEY
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: chatbot-secrets
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: chatbot-secrets
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: AWS_REGION
+              valueFrom:
+                configMapKeyRef:
+                  name: chatbot-config
+                  key: AWS_REGION
+            - name: AWS_S3_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: chatbot-secrets
+                  key: AWS_S3_BUCKET
+            - name: STRIPE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: chatbot-secrets
+                  key: STRIPE_SECRET_KEY
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: chatbot-secrets
+                  key: DB_PASSWORD
+            - name: FRONTEND_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: chatbot-config
+                  key: FRONTEND_URL
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 3001
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 3001
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 3001
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            runAsNonRoot: true
+            runAsUser: 1001
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: uploads
+              mountPath: /app/uploads
+      volumes:
+        - name: uploads
+          emptyDir:
+            sizeLimit: "2Gi"
+      serviceAccountName: backend-sa
+      securityContext:
+        fsGroup: 1001
+      terminationGracePeriodSeconds: 60
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backend-sa
+  namespace: chatbot-platform
+  labels:
+    app.kubernetes.io/name: ai-chatbot
+    app.kubernetes.io/component: backend
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: backend-pdb
+  namespace: chatbot-platform
+  labels:
+    app: backend
+    app.kubernetes.io/name: ai-chatbot
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: backend
